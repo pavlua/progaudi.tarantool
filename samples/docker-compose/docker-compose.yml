@@ -31,3 +31,11 @@ services:
       - tarantool2
     ports:
       - 5000:5000
+
+  admin:
+    image: quay.io/basis-company/tarantool-admin
+    ports:
+      - 8888:80
+    depends_on:
+      - tarantool1
+      - tarantool2
