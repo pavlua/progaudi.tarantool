@@ -1,11 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="15.0">
-  <PropertyGroup Condition=" '$(OS)' == 'Windows_NT' ">
-    <TargetFrameworks>net46;netstandard1.4;netstandard2.0</TargetFrameworks>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(OS)' != 'Windows_NT' ">
-    <TargetFrameworks>netstandard1.4;netstandard2.0</TargetFrameworks>
-  </PropertyGroup>
   <PropertyGroup>
+	<TargetFramework>netstandard2.0</TargetFramework>
     <PatchLevelVersion Condition=" '$(BuildNumber)' == '' ">0</PatchLevelVersion>
     <PatchLevelVersion Condition=" '$(BuildNumber)' != '' ">$(BuildNumber).1-prerelease</PatchLevelVersion>
     <Version>0.9.$(PatchLevelVersion)</Version>
@@ -79,8 +74,4 @@
       <DependentUpon>ValueTupleConverters.tt</DependentUpon>
     </Compile>
   </ItemGroup>
-
-  <PropertyGroup Condition=" '$(TargetFramework)' == 'netstandard1.4' ">
-    <DefineConstants>$(DefineConstants);PROGAUDI_NETCORE</DefineConstants>
-  </PropertyGroup>
 </Project>
