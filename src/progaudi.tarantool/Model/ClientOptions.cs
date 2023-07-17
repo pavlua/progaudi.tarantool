@@ -36,6 +36,8 @@ namespace ProGaudi.Tarantool.Client.Model
 
         public string Name { get; set; }
 
+        public ConnectorStrategy Strategy { get; set; } = ConnectorStrategy.SingleNode;
+
         private class LogWriterWrapper : ILog
         {
             private readonly ClientOptions _options;

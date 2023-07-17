@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
+using ProGaudi.Tarantool.Client.Connections;
 using ProGaudi.Tarantool.Client.Model;
 using ProGaudi.Tarantool.Client.Model.Requests;
 using ProGaudi.Tarantool.Client.Model.Responses;
@@ -22,7 +23,9 @@ namespace ProGaudi.Tarantool.Client
             _clientOptions = options;
             TarantoolConvertersRegistrator.Register(options.MsgPackContext);
 
-            _logicalConnection = new LogicalConnectionManager(options);
+            _logicalConnection = options.Strategy == ConnectorStrategy.SingleNode ?
+                (ILogicalConnection)new SingleLogicalConnectionManager(options) :
+                new RoundRobinLogicalConnectionManager(options);
             Metrics = new Metrics(_logicalConnection);
             Schema = new Schema(_logicalConnection);
         }

@@ -3,7 +3,6 @@ using System.IO;
 using System.Linq;
 using System.Net.Sockets;
 using System.Threading.Tasks;
-
 using ProGaudi.Tarantool.Client.Model;
 using ProGaudi.Tarantool.Client.Utils;
 
@@ -11,7 +10,7 @@ using ProGaudi.Tarantool.Client.Utils;
 using System.Net;
 #endif
 
-namespace ProGaudi.Tarantool.Client
+namespace ProGaudi.Tarantool.Client.Connections
 {
     internal class NetworkStreamPhysicalConnection : IPhysicalConnection
     {
@@ -20,6 +19,16 @@ namespace ProGaudi.Tarantool.Client
         private Socket _socket;
 
         private bool _disposed;
+
+        private readonly ClientOptions _options;
+
+        private readonly TarantoolNode _node;
+
+        public NetworkStreamPhysicalConnection(ClientOptions options, TarantoolNode node)
+        {
+            _options = options;
+            _node = node;
+        }
 
         public void Dispose()
         {
@@ -34,28 +43,21 @@ namespace ProGaudi.Tarantool.Client
             _socket?.Dispose();
         }
 
-        public async Task Connect(ClientOptions options)
+        public async Task Connect()
         {
-            if (! options.ConnectionOptions.Nodes.Any()) 
-                throw new ClientSetupException("There are zero configured nodes, you should provide one");
-
-            options.LogWriter?.WriteLine("Starting socket connection...");
-            var singleNode = options.ConnectionOptions.Nodes.Single();
+            _options.LogWriter?.WriteLine("Starting socket connection...");
 
             _socket = new Socket(SocketType.Stream, ProtocolType.Tcp)
             {
                 NoDelay = true
             };
 
-            if(options.ConfigureSocket != null)
-            {
-                options.ConfigureSocket(_socket);
-            }
+            _options.ConfigureSocket?.Invoke(_socket);
 
-            await ConnectAsync(_socket, singleNode.Uri.Host, singleNode.Uri.Port).ConfigureAwait(false);;
+            await ConnectAsync(_socket, _node.Uri.Host, _node.Uri.Port).ConfigureAwait(false); ;
 
             _stream = new NetworkStream(_socket, true);
-            options.LogWriter?.WriteLine("Socket connection established.");
+            _options.LogWriter?.WriteLine("Socket connection established.");
         }
 
         public void Write(byte[] buffer, int offset, int count)
@@ -80,7 +82,7 @@ namespace ProGaudi.Tarantool.Client
         /// https://github.com/mongodb/mongo-csharp-driver/commit/9c2097f349d5096a04ea81b0c9ceb60c7e1acee4
         private static async Task ConnectAsync(Socket socket, string host, int port)
         {
-            var resolved = await Dns.GetHostAddressesAsync(host).ConfigureAwait(false);;
+            var resolved = await Dns.GetHostAddressesAsync(host).ConfigureAwait(false); ;
             for (var i = 0; i < resolved.Length; i++)
             {
                 try

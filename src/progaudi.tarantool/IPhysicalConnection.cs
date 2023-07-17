@@ -6,7 +6,7 @@ namespace ProGaudi.Tarantool.Client
 {
     public interface IPhysicalConnection : IDisposable
     {
-        Task Connect(ClientOptions options);
+        Task Connect();
 
         Task Flush();
 

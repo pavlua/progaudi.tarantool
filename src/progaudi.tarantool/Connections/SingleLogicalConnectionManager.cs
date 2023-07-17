@@ -1,15 +1,15 @@
 ﻿using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-
 using ProGaudi.Tarantool.Client.Model;
 using ProGaudi.Tarantool.Client.Model.Requests;
 using ProGaudi.Tarantool.Client.Model.Responses;
 using ProGaudi.Tarantool.Client.Utils;
 
-namespace ProGaudi.Tarantool.Client
+namespace ProGaudi.Tarantool.Client.Connections
 {
-    public class LogicalConnectionManager : ILogicalConnection
+    public class SingleLogicalConnectionManager : ILogicalConnection
     {
         private readonly ClientOptions _clientOptions;
 
@@ -35,7 +35,7 @@ namespace ProGaudi.Tarantool.Client
 
         private DateTimeOffset _nextPingTime = DateTimeOffset.MinValue;
 
-        public LogicalConnectionManager(ClientOptions options)
+        public SingleLogicalConnectionManager(ClientOptions options)
         {
             _clientOptions = options;
 
@@ -81,15 +81,16 @@ namespace ProGaudi.Tarantool.Client
 
                 _connected.Reset();
 
-                _clientOptions.LogWriter?.WriteLine($"{nameof(LogicalConnectionManager)}: Connecting...");
+                _clientOptions.LogWriter?.WriteLine($"{nameof(SingleLogicalConnectionManager)}: Connecting...");
 
-                var newConnection = new LogicalConnection(_clientOptions, _requestIdCounter);
-                await newConnection.Connect().ConfigureAwait(false);;
+                var singleNode = _clientOptions.ConnectionOptions.Nodes.FirstOrDefault();
+                var newConnection = new LogicalConnection(_clientOptions, singleNode, _requestIdCounter);
+                await newConnection.Connect().ConfigureAwait(false); ;
                 Interlocked.Exchange(ref _droppableLogicalConnection, newConnection)?.Dispose();
 
                 _connected.Set();
 
-                _clientOptions.LogWriter?.WriteLine($"{nameof(LogicalConnectionManager)}: Connected...");
+                _clientOptions.LogWriter?.WriteLine($"{nameof(SingleLogicalConnectionManager)}: Connected...");
 
                 if (_pingCheckInterval > 0 && _timer == null)
                 {
@@ -117,7 +118,7 @@ namespace ProGaudi.Tarantool.Client
             }
             catch (Exception e)
             {
-                _clientOptions.LogWriter?.WriteLine($"{nameof(LogicalConnectionManager)}: Ping failed with exception: {e.Message}. Dropping current connection.");
+                _clientOptions.LogWriter?.WriteLine($"{nameof(SingleLogicalConnectionManager)}: Ping failed with exception: {e.Message}. Dropping current connection.");
                 _droppableLogicalConnection?.Dispose();
             }
             finally
@@ -172,7 +173,7 @@ namespace ProGaudi.Tarantool.Client
         {
             await Connect().ConfigureAwait(false);
 
-            var result = await _droppableLogicalConnection.SendRawRequest<TRequest>(request, timeout).ConfigureAwait(false);
+            var result = await _droppableLogicalConnection.SendRawRequest(request, timeout).ConfigureAwait(false);
 
             ScheduleNextPing();
 

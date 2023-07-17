@@ -3,22 +3,18 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-
 using ProGaudi.MsgPack.Light;
-
 using ProGaudi.Tarantool.Client.Model;
 using ProGaudi.Tarantool.Client.Model.Headers;
 using ProGaudi.Tarantool.Client.Model.Requests;
 using ProGaudi.Tarantool.Client.Model.Responses;
 using ProGaudi.Tarantool.Client.Utils;
 
-namespace ProGaudi.Tarantool.Client
+namespace ProGaudi.Tarantool.Client.Connections
 {
     internal class LogicalConnection : ILogicalConnection
     {
         private readonly MsgPackContext _msgPackContext;
-
-        private readonly ClientOptions _clientOptions;
 
         private readonly RequestIdCounter _requestIdCounter;
 
@@ -29,25 +25,27 @@ namespace ProGaudi.Tarantool.Client
         private readonly IRequestWriter _requestWriter;
 
         private readonly ILog _logWriter;
+
+        private readonly TarantoolNode _node;
+
         private bool _disposed;
 
-        public LogicalConnection(ClientOptions options, RequestIdCounter requestIdCounter)
+        private readonly ConnectionPinger _connectionPinger;
+
+        public LogicalConnection(ClientOptions options, TarantoolNode node, RequestIdCounter requestIdCounter)
         {
-            _clientOptions = options;
             _requestIdCounter = requestIdCounter;
             _msgPackContext = options.MsgPackContext;
             _logWriter = options.LogWriter;
 
-            _physicalConnection = new NetworkStreamPhysicalConnection();
-            _responseReader = new ResponseReader(_clientOptions, _physicalConnection);
-            _requestWriter = new RequestWriter(_clientOptions, _physicalConnection);
+            _physicalConnection = new NetworkStreamPhysicalConnection(options, node);
+            _responseReader = new ResponseReader(options, _physicalConnection);
+            _requestWriter = new RequestWriter(options, _physicalConnection);
+            _connectionPinger = new ConnectionPinger(options, this, node);
+            _node = node;
         }
 
-        public uint PingsFailedByTimeoutCount
-        {
-            get;
-            private set;
-        }
+        public uint PingsFailedByTimeoutCount { get; private set; }
 
         public void Dispose()
         {
@@ -58,6 +56,7 @@ namespace ProGaudi.Tarantool.Client
 
             _disposed = true;
 
+            _connectionPinger.Dispose();
             _responseReader.Dispose();
             _requestWriter.Dispose();
             _physicalConnection.Dispose();
@@ -65,7 +64,7 @@ namespace ProGaudi.Tarantool.Client
 
         public async Task Connect()
         {
-            await _physicalConnection.Connect(_clientOptions).ConfigureAwait(false);
+            await _physicalConnection.Connect().ConfigureAwait(false);
 
             var greetingsResponseBytes = new byte[128];
             var readCount = await _physicalConnection.ReadAsync(greetingsResponseBytes, 0, greetingsResponseBytes.Length).ConfigureAwait(false);
@@ -76,16 +75,17 @@ namespace ProGaudi.Tarantool.Client
 
             var greetings = new GreetingsResponse(greetingsResponseBytes);
 
-            _clientOptions.LogWriter?.WriteLine($"Greetings received, salt is {Convert.ToBase64String(greetings.Salt)} .");
+            _logWriter?.WriteLine($"Greetings received, salt is {Convert.ToBase64String(greetings.Salt)} .");
 
             PingsFailedByTimeoutCount = 0;
 
             _responseReader.BeginReading();
             _requestWriter.BeginWriting();
 
-            _clientOptions.LogWriter?.WriteLine("Server responses reading started.");
+            _logWriter?.WriteLine("Server responses reading started.");
 
             await LoginIfNotGuest(greetings).ConfigureAwait(false);
+            _connectionPinger.Setup();
         }
 
         public bool IsConnected()
@@ -126,21 +126,16 @@ namespace ProGaudi.Tarantool.Client
 
         private async Task LoginIfNotGuest(GreetingsResponse greetings)
         {
-            if (! _clientOptions.ConnectionOptions.Nodes.Any()) 
-                throw new ClientSetupException("There are zero configured nodes, you should provide one");
-
-            var singleNode = _clientOptions.ConnectionOptions.Nodes.Single();
-
-            if (string.IsNullOrEmpty(singleNode.Uri.UserName))
+            if (string.IsNullOrEmpty(_node.Uri.UserName))
             {
-                _clientOptions.LogWriter?.WriteLine("Guest mode, no authentication attempt.");
+                _logWriter?.WriteLine("Guest mode, no authentication attempt.");
                 return;
             }
 
-            var authenticateRequest = AuthenticationRequest.Create(greetings, singleNode.Uri);
+            var authenticateRequest = AuthenticationRequest.Create(greetings, _node.Uri);
 
             await SendRequestWithEmptyResponse(authenticateRequest).ConfigureAwait(false);
-            _clientOptions.LogWriter?.WriteLine($"Authentication request send: {authenticateRequest}");
+            _logWriter?.WriteLine($"Authentication request send: {authenticateRequest}");
         }
 
         private async Task<MemoryStream> SendRequestImpl<TRequest>(TRequest request, TimeSpan? timeout)
@@ -151,18 +146,17 @@ namespace ProGaudi.Tarantool.Client
                 throw new ObjectDisposedException(nameof(LogicalConnection));
             }
 
-          
             var requestId = _requestIdCounter.GetRequestId();
             var responseTask = _responseReader.GetResponseTask(requestId);
 
             var stream = CreateAndSerializeHeader(request, requestId);
             MsgPackSerializer.Serialize(request, stream, _msgPackContext);
             var totalLength = stream.Position - Constants.PacketSizeBufferSize;
-            var packetLength = new PacketSize((uint)(totalLength));
+            var packetLength = new PacketSize((uint)totalLength);
             AddPacketSize(stream, packetLength);
 
             ArraySegment<byte> buffer;
-            if(!stream.TryGetBuffer(out buffer))
+            if (!stream.TryGetBuffer(out buffer))
             {
                 throw new InvalidOperationException("broken buffer");
             }
@@ -183,6 +177,8 @@ namespace ProGaudi.Tarantool.Client
                 var responseStream = await responseTask.ConfigureAwait(false);
                 _logWriter?.WriteLine($"Response with requestId {requestId} is recieved, length: {responseStream.Length}.");
 
+                _connectionPinger.ScheduleNextPing();
+
                 return responseStream;
             }
             catch (ArgumentException)
@@ -202,7 +198,7 @@ namespace ProGaudi.Tarantool.Client
             RequestId requestId) where TRequest : IRequest
         {
             var stream = new MemoryStream();
-           
+
             var requestHeader = new RequestHeader(request.Code, requestId);
             stream.Seek(Constants.PacketSizeBufferSize, SeekOrigin.Begin);
             MsgPackSerializer.Serialize(requestHeader, stream, _msgPackContext);

@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 
 namespace ProGaudi.Tarantool.Client
 {
@@ -13,7 +14,7 @@ namespace ProGaudi.Tarantool.Client
 
         public void WriteLine(string message)
         {
-            InternalWriter.WriteLine(message);
+            InternalWriter.WriteLine($"[{DateTime.Now:yyyy-MM-ddTHH:mm:ss.fff}]" + message);
         }
 
         public void Flush()
