@@ -56,14 +56,19 @@ namespace ProGaudi.Tarantool.Client.Connections
 
             _disposed = true;
 
+            _logWriter?.WriteLine($"Disposing connection {_node.Uri}...");
+
             _connectionPinger.Dispose();
             _responseReader.Dispose();
             _requestWriter.Dispose();
             _physicalConnection.Dispose();
         }
 
+        //public event OnDisposed
+
         public async Task Connect()
         {
+            await Task.Delay(1000);
             await _physicalConnection.Connect().ConfigureAwait(false);
 
             var greetingsResponseBytes = new byte[128];
@@ -177,8 +182,6 @@ namespace ProGaudi.Tarantool.Client.Connections
                 var responseStream = await responseTask.ConfigureAwait(false);
                 _logWriter?.WriteLine($"Response with requestId {requestId} is recieved, length: {responseStream.Length}.");
 
-                _connectionPinger.ScheduleNextPing();
-
                 return responseStream;
             }
             catch (ArgumentException)
@@ -190,6 +193,10 @@ namespace ProGaudi.Tarantool.Client.Connections
             {
                 PingsFailedByTimeoutCount++;
                 throw;
+            }
+            finally
+            {
+                _connectionPinger.ScheduleNextPing();
             }
         }
 

@@ -9,7 +9,7 @@ namespace Sandbox
     {
         static async Task Main()
         {
-            var box = new Box(new ClientOptions("admin:adminPassword@127.0.0.1:3320,admin:adminPassword@127.0.0.1:3321" 
+            var box = new Box(new ClientOptions("admin:adminPassword@127.0.0.1:3320,admin:adminPassword@127.0.0.1:3321"
                 , log: new TextWriterLog(Console.Out)
                 )
             {
@@ -22,7 +22,7 @@ namespace Sandbox
     
             await Parallel.ForEachAsync(Enumerable.Range(1, 10), async (i, token) => 
             {
-                for (var j = 1; j <= 10; j++)
+                for (var j = 1; j <= 100; j++)
                 {
                     try
                     {
@@ -32,7 +32,7 @@ namespace Sandbox
                     catch (Exception ex) 
                     { 
                         Console.WriteLine(ex.ToString()); 
-                    };
+                    }
                 }
             });
 
@@ -51,7 +51,6 @@ namespace Sandbox
                     await box.Connect();
                 }
             }
-            Console.ReadKey();
         }
     }
 }

@@ -38,13 +38,6 @@ namespace ProGaudi.Tarantool.Client.Connections
         public SingleLogicalConnectionManager(ClientOptions options)
         {
             _clientOptions = options;
-
-            if (_clientOptions.ConnectionOptions.PingCheckInterval >= 0)
-            {
-                _pingCheckInterval = _clientOptions.ConnectionOptions.PingCheckInterval;
-            }
-
-            _pingTimeout = _clientOptions.ConnectionOptions.PingCheckTimeout;
         }
 
         public uint PingsFailedByTimeoutCount => _droppableLogicalConnection?.PingsFailedByTimeoutCount ?? 0;
@@ -91,42 +84,10 @@ namespace ProGaudi.Tarantool.Client.Connections
                 _connected.Set();
 
                 _clientOptions.LogWriter?.WriteLine($"{nameof(SingleLogicalConnectionManager)}: Connected...");
-
-                if (_pingCheckInterval > 0 && _timer == null)
-                {
-                    _timer = new Timer(x => CheckPing(), null, _pingTimerInterval, Timeout.Infinite);
-                }
             }
             finally
             {
                 _reconnectAvailable.Set();
-            }
-        }
-
-        private static readonly PingRequest _pingRequest = new PingRequest();
-
-        private void CheckPing()
-        {
-            try
-            {
-                if (_nextPingTime > DateTimeOffset.UtcNow)
-                {
-                    return;
-                }
-
-                SendRequestWithEmptyResponse(_pingRequest, _pingTimeout).GetAwaiter().GetResult();
-            }
-            catch (Exception e)
-            {
-                _clientOptions.LogWriter?.WriteLine($"{nameof(SingleLogicalConnectionManager)}: Ping failed with exception: {e.Message}. Dropping current connection.");
-                _droppableLogicalConnection?.Dispose();
-            }
-            finally
-            {
-                if (_disposing == 0)
-                {
-                    _timer?.Change(_pingTimerInterval, Timeout.Infinite);
-                }
             }
         }
 
@@ -137,35 +98,19 @@ namespace ProGaudi.Tarantool.Client.Connections
             return _droppableLogicalConnection?.IsConnected() ?? false;
         }
 
-        private void ScheduleNextPing()
-        {
-            if (_pingCheckInterval > 0)
-            {
-                _nextPingTime = DateTimeOffset.UtcNow.AddMilliseconds(_pingCheckInterval);
-            }
-        }
-
         public async Task<DataResponse<TResponse[]>> SendRequest<TRequest, TResponse>(TRequest request, TimeSpan? timeout = null)
             where TRequest : IRequest
         {
             await Connect().ConfigureAwait(false);
 
-            var result = await _droppableLogicalConnection.SendRequest<TRequest, TResponse>(request, timeout).ConfigureAwait(false);
-
-            ScheduleNextPing();
-
-            return result;
+            return await _droppableLogicalConnection.SendRequest<TRequest, TResponse>(request, timeout).ConfigureAwait(false);
         }
 
         public async Task<DataResponse> SendRequest<TRequest>(TRequest request, TimeSpan? timeout = null) where TRequest : IRequest
         {
             await Connect().ConfigureAwait(false);
 
-            var result = await _droppableLogicalConnection.SendRequest(request, timeout).ConfigureAwait(false);
-
-            ScheduleNextPing();
-
-            return result;
+            return await _droppableLogicalConnection.SendRequest(request, timeout).ConfigureAwait(false);
         }
 
         public async Task<byte[]> SendRawRequest<TRequest>(TRequest request, TimeSpan? timeout = null)
@@ -173,11 +118,7 @@ namespace ProGaudi.Tarantool.Client.Connections
         {
             await Connect().ConfigureAwait(false);
 
-            var result = await _droppableLogicalConnection.SendRawRequest(request, timeout).ConfigureAwait(false);
-
-            ScheduleNextPing();
-
-            return result;
+            return await _droppableLogicalConnection.SendRawRequest(request, timeout).ConfigureAwait(false);
         }
 
         public async Task SendRequestWithEmptyResponse<TRequest>(TRequest request, TimeSpan? timeout = null) where TRequest : IRequest
@@ -185,8 +126,6 @@ namespace ProGaudi.Tarantool.Client.Connections
             await Connect().ConfigureAwait(false);
 
             await _droppableLogicalConnection.SendRequestWithEmptyResponse(request, timeout).ConfigureAwait(false);
-
-            ScheduleNextPing();
         }
     }
 }

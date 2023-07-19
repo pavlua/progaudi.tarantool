@@ -20,26 +20,13 @@ namespace ProGaudi.Tarantool.Client.Connections
 
         private readonly Dictionary<TarantoolNode, LogicalConnection> _droppableNodeLogicalConnections = new Dictionary<TarantoolNode, LogicalConnection>();
 
-
-        
-
         private int _disposing;
 
         private const int _connectionTimeout = 1000;
 
-
         public RoundRobinLogicalConnectionManager(ClientOptions options)
         {
             _clientOptions = options;
-
-            //if (_clientOptions.ConnectionOptions.PingCheckInterval >= 0)
-            //{
-            //    _pingCheckInterval = _clientOptions.ConnectionOptions.PingCheckInterval;
-            //}
-
-            //_pingTimeout = _clientOptions.ConnectionOptions.PingCheckTimeout;
-
-
             _nodeConnectionSemaphores = _clientOptions.ConnectionOptions.Nodes.ToDictionary(n => n, _ => new SemaphoreSlim(1, 1));
         }
 
@@ -58,7 +45,6 @@ namespace ProGaudi.Tarantool.Client.Connections
                 _droppableNodeLogicalConnections[node] = null;
                 prevConnection?.Dispose();
             }
-            //Interlocked.Exchange(ref _timer, null)?.Dispose();
         }
 
         public async Task Connect()
@@ -81,7 +67,7 @@ namespace ProGaudi.Tarantool.Client.Connections
             {
                 throw ExceptionHelper.NotConnected();
             }
-
+            
             try
             {
                 if (IsConnectedInternal(node))
@@ -99,11 +85,6 @@ namespace ProGaudi.Tarantool.Client.Connections
                 prevConnection?.Dispose();
 
                 _clientOptions.LogWriter?.WriteLine($"{nameof(RoundRobinLogicalConnectionManager)}: Connected to {node.Uri}...");
-
-                //if (_pingCheckInterval > 0 && _timer == null)
-                //{
-                //    _timer = new Timer(x => CheckPing(), null, _pingTimerInterval, Timeout.Infinite);
-                //}
 
                 return newConnection;
             }
@@ -131,58 +112,13 @@ namespace ProGaudi.Tarantool.Client.Connections
             return _clientOptions.ConnectionOptions.Nodes[new Random().Next(count)];
         }
 
-
-        //private static readonly PingRequest _pingRequest = new PingRequest();
-
-        //private void CheckPing()
-        //{
-        //    try
-        //    {
-        //        if (_nextPingTime > DateTimeOffset.UtcNow)
-        //        {
-        //            return;
-        //        }
-
-        //        SendRequestWithEmptyResponse(_pingRequest, _pingTimeout).GetAwaiter().GetResult();
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        _clientOptions.LogWriter?.WriteLine($"{nameof(RoundRobinLogicalConnectionManager)}: Ping failed with exception: {e.Message}. Dropping current connection.");
-        //        _droppableLogicalConnection?.Dispose();
-        //    }
-        //    finally
-        //    {
-        //        if (_disposing == 0)
-        //        {
-        //            _timer?.Change(_pingTimerInterval, Timeout.Infinite);
-        //        }
-        //    }
-        //}
-
-        //private bool IsConnectedInternal()
-        //{
-        //    return _droppableLogicalConnection?.IsConnected() ?? false;
-        //}
-
-        //private void ScheduleNextPing()
-        //{
-        //    if (_pingCheckInterval > 0)
-        //    {
-        //        _nextPingTime = DateTimeOffset.UtcNow.AddMilliseconds(_pingCheckInterval);
-        //    }
-        //}
-
         public async Task<DataResponse<TResponse[]>> SendRequest<TRequest, TResponse>(TRequest request, TimeSpan? timeout = null)
             where TRequest : IRequest
         {
             var node = GetRandomNode();
             var connection = await Connect(node).ConfigureAwait(false);
 
-            var result = await connection.SendRequest<TRequest, TResponse>(request, timeout).ConfigureAwait(false);
-
-            //ScheduleNextPing();
-
-            return result;
+            return await connection.SendRequest<TRequest, TResponse>(request, timeout).ConfigureAwait(false);
         }
 
         public async Task<DataResponse> SendRequest<TRequest>(TRequest request, TimeSpan? timeout = null) where TRequest : IRequest
@@ -190,11 +126,7 @@ namespace ProGaudi.Tarantool.Client.Connections
             var node = GetRandomNode();
             var connection = await Connect(node).ConfigureAwait(false);
 
-            var result = await connection.SendRequest(request, timeout).ConfigureAwait(false);
-
-            //ScheduleNextPing();
-
-            return result;
+            return await connection.SendRequest(request, timeout).ConfigureAwait(false);
         }
 
         public async Task<byte[]> SendRawRequest<TRequest>(TRequest request, TimeSpan? timeout = null)
@@ -203,11 +135,7 @@ namespace ProGaudi.Tarantool.Client.Connections
             var node = GetRandomNode();
             var connection = await Connect(node).ConfigureAwait(false);
 
-            var result = await connection.SendRawRequest(request, timeout).ConfigureAwait(false);
-
-            //ScheduleNextPing();
-
-            return result;
+            return await connection.SendRawRequest(request, timeout).ConfigureAwait(false);
         }
 
         public async Task SendRequestWithEmptyResponse<TRequest>(TRequest request, TimeSpan? timeout = null) where TRequest : IRequest
@@ -216,8 +144,6 @@ namespace ProGaudi.Tarantool.Client.Connections
             var connection = await Connect(node).ConfigureAwait(false);
 
             await connection.SendRequestWithEmptyResponse(request, timeout).ConfigureAwait(false);
-
-            //ScheduleNextPing();
         }
     }
 }
