@@ -17,6 +17,23 @@ namespace ProGaudi.Tarantool.Client.Model
                 Parse(replicationSource, log);
             }
         }
+        
+        public ConnectionOptions(ConnectionOptions clusterConnOptions, TarantoolNode node)
+        {
+            // TODO: move to pool code
+            Nodes.Add(node);
+            WriteStreamBufferSize = clusterConnOptions.WriteStreamBufferSize;
+            MinRequestsWithThrottle = clusterConnOptions.MinRequestsWithThrottle;
+            MaxRequestsInBatch = clusterConnOptions.MaxRequestsInBatch;
+            WriteThrottlePeriodInMs = clusterConnOptions.WriteThrottlePeriodInMs;
+            ReadStreamBufferSize = clusterConnOptions.ReadStreamBufferSize;
+            WriteNetworkTimeout = clusterConnOptions.WriteNetworkTimeout;
+            ReadNetworkTimeout = clusterConnOptions.ReadNetworkTimeout;
+            PingCheckInterval = clusterConnOptions.PingCheckInterval;
+            PingCheckTimeout = clusterConnOptions.PingCheckTimeout;
+            ReadSchemaOnConnect = true;
+            ReadBoxInfoOnConnect = true;
+        }
 
         private void Parse(string replicationSource, ILog log)
         {
